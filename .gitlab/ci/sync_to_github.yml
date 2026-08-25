@@ -1,0 +1,61 @@
+# GitLab -> GitHub sync.
+#
+# A pipeline is created automatically on every push to main. The sync job is a
+# manual (play-button) job that does not run on its own: click it to push that
+# commit to GitHub. You can also create a pipeline via Build -> Pipelines ->
+# Run pipeline and click the job there.
+#
+# Required GitLab CI/CD variables (Settings -> CI/CD -> Variables):
+#   GITHUB_DEPLOY_KEY  base64-encoded SSH private key; its public key must be added
+#                      to the GitHub repo Deploy keys with "Allow write access".
+#   GITHUB_REPO        target repo, owner/repo, e.g. OpenSiFli/sifli-sdk-demo
+#   GIT_CI_USER_NAME   optional, committer name, default "SiFli CI"
+#   GIT_CI_USER_EMAIL  optional, committer email, default "ci@sifli.com"
+#   SYNC_BRANCH        optional, branch to sync, defaults to current $CI_COMMIT_REF_NAME
+sync_to_github:
+  stage: sync_to_github
+  # alpine/git's default entrypoint is git itself, which turns the script into
+  # `git sh -c ...` and fails with "git: 'sh' is not a git command". Clear the
+  # entrypoint so the runner uses a normal shell.
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
+  # Pin to a docker runner. Without tags the job may be picked up by any runner
+  # (including a Windows PowerShell runner that cannot run the alpine image),
+  # which causes SSL or shell-incompatibility errors.
+  tags:
+    - docker
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: 0
+  before_script:
+    # alpine/git ships ssh but not base64/bash; install the tools we need.
+    - apk add --no-cache openssh-client bash coreutils
+    # Start the SSH agent and load the deploy private key.
+    - eval $(ssh-agent -s)
+    - echo "$GITHUB_DEPLOY_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+    - git config --global user.name  "${GIT_CI_USER_NAME:-SiFli CI}"
+    - git config --global user.email "${GIT_CI_USER_EMAIL:-ci@sifli.com}"
+  script:
+    - export TARGET_BRANCH="${SYNC_BRANCH:-$CI_COMMIT_REF_NAME}"
+    - echo "Source (GitLab) branch = $CI_COMMIT_REF_NAME"
+    - echo "Target (GitHub) branch = $TARGET_BRANCH @ $GITHUB_REPO"
+    - git remote add github "git@github.com:${GITHUB_REPO}.git" 2>/dev/null
+        || git remote set-url github "git@github.com:${GITHUB_REPO}.git"
+    # Fetch the target so --force-with-lease has a baseline.
+    - git fetch github "$TARGET_BRANCH" || echo "(remote branch may not exist yet, ok)"
+    # Push. --force-with-lease fails instead of blindly overwriting if GitHub moved.
+    - git push github "HEAD:$TARGET_BRANCH" --force-with-lease
+    - echo "Sync to github:${GITHUB_REPO} branch $TARGET_BRANCH completed"
+  rules:
+    # Pipeline auto-created on push to main: sync is an optional manual job.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: true
+    # Web "Run pipeline": same optional manual job.
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - when: never
