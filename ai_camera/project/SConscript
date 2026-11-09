@@ -1,0 +1,14 @@
+import os
+from building import *
+
+cwd = GetCurrentDir()
+Import('SIFLI_SDK')
+objs = SConscript(os.path.join(SIFLI_SDK, 'SConscript'),
+                  variant_dir='sifli_sdk', duplicate=0)
+objs.extend(SConscript(os.path.join(cwd, '../src/SConscript'),
+                       variant_dir='src', duplicate=0))
+camera_root = os.path.join(os.environ['SIFLI_PERIPHERALS_ROOT'], 'camera_framework')
+objs.extend(SConscript(os.path.join(camera_root, 'SConscript'),
+                       variant_dir='camera_framework', duplicate=0))
+Return('objs')
+

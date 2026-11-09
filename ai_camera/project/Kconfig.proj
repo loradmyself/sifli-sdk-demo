@@ -1,0 +1,41 @@
+menu "XiaoZhi over Bluetooth PAN"
+
+config LEARNING_CAMERA_BT_NAME
+    string "Bluetooth device name"
+    default "sifli-learning-camera"
+
+config LEARNING_CAMERA_PAN_CONNECT_DELAY_MS
+    int "PAN connect delay after pairing (ms)"
+    default 3000
+    range 1000 10000
+
+config LEARNING_CAMERA_PAN_RETRY_DELAY_MS
+    int "PAN reconnect delay (ms)"
+    default 10000
+    range 1000 60000
+
+config LEARNING_CAMERA_PAN_RETRY_MAX
+    int "PAN reconnect attempts"
+    default 5
+    range 1 20
+
+endmenu
+
+menu "Assistant UI diagnostics"
+
+config LEARNING_CAMERA_UI_LOG
+    bool "Camera UI timing and redraw diagnostics"
+    default y
+
+config LEARNING_CAMERA_FPS_LOG
+    bool "Camera fps diagnostics"
+    default y
+
+endmenu
+
+config CUSTOM_MEM_MAP
+    bool
+    select custom_mem_map
+    default y if !SOC_SIMULATOR
+
+source "$SIFLI_PERIPHERALS_ROOT/camera_framework/Kconfig"
